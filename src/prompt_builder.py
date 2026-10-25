@@ -12,13 +12,27 @@ def build_prompt(user_prompt: str, functions_definition: Any) -> str:
         indent=2,
     )
 
-    return (
+    system_message = (
         "You are a function calling assistant.\n"
-        "Choose the function that best matches the user's request.\n"
-        "Do not execute the function or answer the user directly.\n"
-        "Return only a JSON object with the keys "
-        '"name" and "parameters".\n\n'
-        f"Available function definitions:\n{definitions}\n\n"
-        f"User request:\n{user_prompt}\n\n"
-        "Function call:"
+        "Select exactly one function from the provided definitions.\n"
+        "Use the user's exact argument values. Never invent values.\n"
+        "Use only the declared function names and parameter names.\n"
+        "Do not execute functions or answer the user's request.\n"
+        "Return exactly one JSON object with these keys: "
+        '"name" and "parameters".\n'
+        "Do not include explanations or Markdown fences.\n"
+        "Do not include any text before or after the JSON object.\n"
+        "Available function definitions:\n"
+        f"{definitions}"
+    )
+
+    return (
+        "<|im_start|>system\n"
+        f"{system_message}\n"
+        "/no_think"
+        "<|im_end|>\n"
+        "<|im_start|>user\n"
+        f"{user_prompt}\n"
+        "<|im_end|>\n"
+        "<|im_start|>assistant\n"
     )
