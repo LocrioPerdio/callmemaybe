@@ -1,16 +1,17 @@
 import argparse
 from pathlib import Path
 
+
 def parse_arguments() -> argparse.Namespace:
 
     parser = argparse.ArgumentParser(
-        description="Converts natural language promts into " \
+        description="Converts natural language promts into "
         "funcion calls."
         )
     parser.add_argument(
         "--functions_definition",
         type=Path,
-        default= Path("data/input/functions_definition.json"),
+        default=Path("data/input/functions_definition.json"),
         help="Path to the function definitions JSON file"
     )
     parser.add_argument(

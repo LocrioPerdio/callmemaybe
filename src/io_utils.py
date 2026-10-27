@@ -2,6 +2,7 @@ import json
 from typing import Any
 from pathlib import Path
 
+
 def load_json(file_path: Path) -> list[Any]:
     """Description: Load data from a json file
         Parameters: file_path
@@ -16,7 +17,8 @@ def load_json(file_path: Path) -> list[Any]:
     except json.JSONDecodeError:
         print("JSON file has invalid format")
         return []
-    
+
+
 def save_json(file_path: Path, results: list[Any]) -> None:
     try:
         file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -24,5 +26,3 @@ def save_json(file_path: Path, results: list[Any]) -> None:
             json.dump(results, file, indent=2)
     except Exception:
         print("Error saving results")
-
-

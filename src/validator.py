@@ -1,3 +1,4 @@
+"""Validate generated function calls against function definitions."""
 
 from src.models import GeneratedFunctionCall
 
