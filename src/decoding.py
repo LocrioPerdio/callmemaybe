@@ -32,3 +32,4 @@ def apply_token_constraints(
     ]
 
     return constrained_logits
+
