@@ -2,19 +2,19 @@
 
 import json
 
-from llm_sdk import Small_LLM_Model
+from llm_sdk import Small_LLM_Model  # type: ignore[attr-defined]
 from pydantic import ValidationError
 
 from src.argument_parser import parse_arguments
 from src.generation import generate_function_call
 from src.io_utils import load_json, save_json
 from src.models import FunctionCallResult, GeneratedFunctionCall
-
+import time
 
 def main() -> None:
     """Run the application."""
     args = parse_arguments()
-
+    start = time.time()
     try:
         functions_definition = load_json(args.functions_definition)
         test_cases = load_json(args.input)
@@ -27,7 +27,9 @@ def main() -> None:
         return
 
     try:
+        print("Starting model initialization...", flush=True)
         model = Small_LLM_Model()
+        print("Done...", flush=True)
     except Exception as error:
         print(f"Error initializing the language model: {error}")
         return
@@ -77,7 +79,8 @@ def main() -> None:
 
     print(f"Processed {len(results)} of {len(test_cases)} test cases.")
     print(f"Results saved to: {args.output}")
-
+    finish = time.time()
+    print("execution:", finish - start)
 
 if __name__ == "__main__":
     main()

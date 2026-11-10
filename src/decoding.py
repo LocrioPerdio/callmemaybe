@@ -1,15 +1,15 @@
 """Utilities for selecting and constraining generated tokens."""
 
 import math
+import numpy as np
 
 
 def select_next_token(logits: list[float]) -> int:
-    """Return the index of the token with the highest logit."""
+    """Return the index of the highest logit."""
     if not logits:
         raise ValueError("Cannot select a token from empty logits.")
 
-    return max(range(len(logits)), key=logits.__getitem__)
-
+    return logits.index(max(logits))
 
 def apply_token_constraints(
     logits: list[float],

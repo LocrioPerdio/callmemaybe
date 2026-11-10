@@ -1,29 +1,36 @@
-"""Build prompts for the language model."""
+"""Build compact prompts for the language model."""
 
 import json
 from typing import Any
 
 
 def build_prompt(user_prompt: str, functions_definition: Any) -> str:
-    """Build the input prompt for function calling."""
+    """Build a compact prompt using the available function definitions."""
+    compact_definitions = [
+        {
+            "name": definition["name"],
+            "description": definition.get("description", ""),
+            "parameters": definition.get("parameters", {}),
+        }
+        for definition in functions_definition
+    ]
+
     definitions = json.dumps(
-        functions_definition,
+        compact_definitions,
         ensure_ascii=False,
-        indent=2,
+        separators=(",", ":"),
     )
 
     system_message = (
-        "You are a function calling assistant.\n"
-        "Select exactly one function from the provided definitions.\n"
-        "Use the user's exact argument values. Never invent values.\n"
-        "Use only the declared function names and parameter names.\n"
-        "Do not execute functions or answer the user's request.\n"
-        "Return exactly one JSON object with these keys: "
-        '"name" and "parameters".\n'
-        "Do not include explanations or Markdown fences.\n"
-        "Do not include any text before or after the JSON object.\n"
-        "Available function definitions:\n"
-        f"{definitions}"
+        "Select the single best function for the user's request. "
+        "Extract the arguments using the declared names and types. "
+        "Do not invent values or execute functions. "
+        'Return only JSON: {"name":"function_name",'
+        '"parameters":{"argument":"value"}}. '
+        "No explanation or Markdown. "
+        "Numeric parameters must be JSON numbers without quotes. "
+        "String parameters must be enclosed in double quotes. "
+        f"Functions: {definitions}"
     )
 
     return (

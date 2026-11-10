@@ -3,9 +3,9 @@
 import json
 
 from pydantic import ValidationError
-from llm_sdk import Small_LLM_Model
+from llm_sdk import Small_LLM_Model  # type: ignore[attr-defined]
 
-from src.decoding import select_constrained_token
+from src.decoding import select_next_token
 from src.models import GeneratedFunctionCall
 from src.prompt_builder import build_prompt
 from src.validator import validate_function_call
@@ -54,8 +54,11 @@ def find_function_call(
     generated_text: str,
     functions_definition: object,
 ) -> GeneratedFunctionCall | None:
-    """Find a valid function call anywhere in generated text."""
+    """Find and validate a function call in generated text."""
     decoder = json.JSONDecoder()
+
+    if not isinstance(functions_definition, list):
+        return None
 
     for index, character in enumerate(generated_text):
         if character != "{":
@@ -66,8 +69,73 @@ def find_function_call(
         except json.JSONDecodeError:
             continue
 
+        if not isinstance(data, dict):
+            continue
+
+        function_name = data.get("name")
+        parameters = data.get("parameters")
+
+        if not isinstance(function_name, str):
+            continue
+
+        if not isinstance(parameters, dict):
+            continue
+
+        definition = next(
+            (
+                item
+                for item in functions_definition
+                if isinstance(item, dict)
+                and item.get("name") == function_name
+            ),
+            None,
+        )
+
+        if definition is None:
+            continue
+
+        expected_parameters = definition.get("parameters")
+
+        if not isinstance(expected_parameters, dict):
+            continue
+
+        normalized_parameters = parameters.copy()
+        conversion_failed = False
+
+        for parameter_name, specification in expected_parameters.items():
+            if not isinstance(specification, dict):
+                conversion_failed = True
+                break
+
+            if specification.get("type") != "number":
+                continue
+
+            value = normalized_parameters.get(parameter_name)
+
+            if isinstance(value, str):
+                try:
+                    converted_value = json.loads(value)
+                except json.JSONDecodeError:
+                    conversion_failed = True
+                    break
+
+                if (
+                    isinstance(converted_value, bool)
+                    or not isinstance(converted_value, (int, float))
+                ):
+                    conversion_failed = True
+                    break
+
+                normalized_parameters[parameter_name] = converted_value
+
+        if conversion_failed:
+            continue
+
         try:
-            result = GeneratedFunctionCall.model_validate(data)
+            result = GeneratedFunctionCall.model_validate({
+                "name": function_name,
+                "parameters": normalized_parameters,
+            })
         except ValidationError:
             continue
 
@@ -82,58 +150,49 @@ def generate_function_call(
     functions_definition: object,
     model: Small_LLM_Model,
 ) -> str:
-    """Generate a function call using JSON prefix constraints."""
+    """Generate and validate a function call for the user's request."""
+    print("Building prompt...", flush=True)
     prompt = build_prompt(user_prompt, functions_definition)
+    print("Tokenizing prompt...", flush=True)
     input_ids = model.encode(prompt)[0].tolist()
+
     generated_ids: list[int] = []
 
-    for _ in range(200):
+    for step in range(120):
+        print(f"Generating token {step + 1}/120...", flush=True)
         logits = model.get_logits_from_input_ids(input_ids)
+        next_token = select_next_token(logits)
 
-        ranked_token_ids = sorted(
-            range(len(logits)),
-            key=logits.__getitem__,
-            reverse=True,
-        )
+        input_ids.append(next_token)
+        generated_ids.append(next_token)
 
-        allowed_token_ids: set[int] = set()
+        # Decode and validate only every 4 tokens.
+        if (step + 1) % 4 == 0:
+            generated_text = model.decode(generated_ids)
 
-        # Keep several high-scoring tokens that preserve valid JSON.
-        for token_id in ranked_token_ids:
-            candidate_ids = generated_ids + [token_id]
-            candidate_text = model.decode(candidate_ids)
-
-            if is_valid_json_prefix(candidate_text):
-                allowed_token_ids.add(token_id)
-
-                if len(allowed_token_ids) >= 50:
-                    break
-
-        if not allowed_token_ids:
-            raise ValueError(
-                "No token can continue a valid JSON prefix. "
-                f"Generated text: {model.decode(generated_ids)!r}"
+            result = find_function_call(
+                generated_text,
+                functions_definition,
             )
 
-        next_token = select_constrained_token(
-            logits,
-            allowed_token_ids,
-        )
+            if result is not None:
+                return result.model_dump_json()
 
-        generated_ids.append(next_token)
-        input_ids.append(next_token)
+    # Validate the remaining generated text.
+    generated_text = model.decode(generated_ids)
+    result = find_function_call(
+        generated_text,
+        functions_definition,
+    )
 
-        generated_text = model.decode(generated_ids)
+    if result is not None:
+        print("Valid function call generated.", flush=True)
+        return result.model_dump_json()
 
-        result = find_function_call(
-            generated_text,
-            functions_definition,
-        )
-
-        if result is not None:
-            return result.model_dump_json()
+    print(f"\nFAILED PROMPT: {user_prompt!r}", flush=True)
+    print(f"GENERATED TEXT: {generated_text!r}", flush=True)
 
     raise ValueError(
         "The model did not generate a valid function call. "
-        f"Generated text: {model.decode(generated_ids)!r}"
+        f"Generated text: {generated_text!r}"
     )
